@@ -67,13 +67,11 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-if (!fs.existsSync(uploadPath)) {
-  fs.mkdirSync(uploadPath);
-}
+
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+   cb(null, "/tmp");
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + path.extname(file.originalname));
