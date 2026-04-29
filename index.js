@@ -16,7 +16,10 @@ const userModel = require("./model/user");
 const uploadPath = "uploads/";
 const app = express()
 app.use(express.json())
-app.use(cors())
+app.use(cors({
+  origin: "https://your-frontend.vercel.app",
+  credentials: true
+}));
 app.use("/uploads", express.static("uploads"));
 
 app.use(express.urlencoded({ extended: true }));
