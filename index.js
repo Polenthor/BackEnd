@@ -1,64 +1,44 @@
 // importing
-const express=require("express")
-require('./connection')
+const express = require("express");
+require("./connection");
 
-var cors = require('cors')
-
-
+const cors = require("cors");
 const multer = require("multer");
-
 const path = require("path");
 const fs = require("fs");
+
 const userModel = require("./model/user");
+const productModel = require("./model/product");
 
+const app = express();
 
-
-const uploadPath = "uploads/";
-const app = express()
-app.use(express.json())
-app.use(cors({
-  origin: "https://modarc-theta.vercel.app", 
-  credentials: true
-}));
-app.use("/uploads", express.static("uploads"));
-
+// ✅ Middleware
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use(cors({
+  origin: "https://modarc-theta.vercel.app",
+  credentials: true
+}));
+
+// ✅ Serve images properly
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 
-// inistialization
-app.get('/', (req, res) => {
-  res.send('Hello Word')
-})
-app.get('/product/:id',function(req,res,next){
-    res.json({msg:'Cors Enabled'})
-})
+// ---------------- ROUTES ----------------
 
-app.get('/trail', (req, res) => {
-  res.send('trail message')
+// test routes
+app.get("/", (req, res) => {
+  res.send("Hello World");
+});
 
-})
+app.get("/trail", (req, res) => {
+  res.send("trail message");
+});
 
-app.post("/add",async(req,res) =>{
-    await employModel(req.body).save()
-    res.send("data added succesfully")
-}
-)
-app.get("/view",async(req,res) =>{
-    var data =await user.find()
-    res.send(data)
-}
-)
-app.delete("/remove/:id",async(req,res) =>{
-    await employModel.findByIdAndDelete(req.params.id)
-    res.send("data succesfully deleted")
-}
-)
-app.put("/edit/:id",async(req,res) =>{
-     await employModel.findByIdAndUpdate(req.params.id,req.body)
-    res.send("Updated")
-})
+// ---------------- USER ----------------
 
+// signup
 app.post("/signup", async (req, res) => {
   try {
     const newUser = new userModel(req.body);
@@ -70,11 +50,43 @@ app.post("/signup", async (req, res) => {
   }
 });
 
+// login
+app.post("/login", async (req, res) => {
+  try {
+    const { Username, Password } = req.body;
 
+    const foundUser = await userModel.findOne({ Username });
+
+    if (!foundUser) {
+      return res.status(404).json({ message: "Invalid username" });
+    }
+
+    if (foundUser.Password !== Password) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    res.status(200).json(foundUser);
+
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+// ---------------- MULTER (FIXED STORAGE) ----------------
+
+// ✅ IMPORTANT: use /tmp in Railway, but also serve correctly
+const uploadDir = path.join(__dirname, "uploads");
+
+// ensure folder exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-   cb(null, "/tmp");
+    cb(null, uploadDir); // ✅ NOT /tmp anymore
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + path.extname(file.originalname));
@@ -83,76 +95,58 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// 🗄️ temporary storage (array instead of DB)
-let products = [];
+
+// ---------------- PRODUCTS ----------------
 
 // ➕ Add product
-// ➕ Add product (Handling multiple files)
 app.post("/addm", upload.array("images", 10), async (req, res) => {
   try {
     const prices = req.body.prices;
-    const stocks = req.body.stocks; // <--- Get from body
+    const stocks = req.body.stocks;
+
+    // ✅ FIX: use Railway backend URL
+    const BASE_URL = "https://backend-production-400ff.up.railway.app";
 
     const imageData = req.files.map((file, index) => ({
-      url: `http://localhost:3000/uploads/${file.filename}`,
+      url: `${BASE_URL}/uploads/${file.filename}`, // ✅ FIXED
       price: Number(prices[index]) || 0,
-      stock: Number(stocks[index]) || 0 // <--- Map it here
+      stock: Number(stocks[index]) || 0
     }));
 
     const newProduct = new productModel({
       name: req.body.name,
-      image: imageData 
+      image: imageData
     });
 
     await newProduct.save();
+
     res.status(200).json(newProduct);
+
   } catch (err) {
+    console.error("Add product error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-const productModel = require("./model/product"); 
-const user = require("./model/user");
 
+// 📦 Get products
 app.get("/products", async (req, res) => {
   try {
     const data = await productModel.find();
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("Products error:", err);
     res.status(500).send("Server error");
   }
 });
-app.post('/login', async (req, res) => {
-    try {
-        const { Username, Password } = req.body;
-        console.log("Login attempt for:", Username); // DEBUG LOG
 
-        // 1. Rename variable to 'foundUser' to avoid conflict with global 'user'
-        const foundUser = await userModel.findOne({ Username: Username });
 
-        if (!foundUser) {
-            console.log("User not found in DB");
-            return res.status(404).json({ message: "Invalid username" });
-        }
+// ---------------- PORT ----------------
 
-        // 2. Simple string comparison (In production, use bcrypt.compare)
-        if (foundUser.Password !== Password) {
-            console.log("Password mismatch");
-            return res.status(401).json({ message: "Invalid password" });
-        }
-
-        console.log("Login successful");
-        res.status(200).json(foundUser);
-
-    } catch (err) {
-        console.error("Login Server Error:", err);
-        res.status(500).json({ message: "Server error during login" });
-    }
-});
-// port setting
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
+
 module.exports = app;
