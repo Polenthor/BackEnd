@@ -28,16 +28,19 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow Postman
+    if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     } else {
-      return callback(new Error("CORS not allowed"));
+      return callback(new Error("CORS blocked"));
     }
   },
   credentials: true
 }));
+
+// ✅ VERY IMPORTANT (handles preflight)
+app.options("*", cors());
 
 // ✅ Serve images properly
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
