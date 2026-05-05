@@ -131,6 +131,19 @@ app.get("/products", async (req, res) => {
 });
 
 // ================= CART =================
+// ================= CART =================
+
+// GET CART
+app.get("/cart/:userId", async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ userId: req.params.userId });
+    res.json(cart || { items: [] });
+  } catch (err) {
+    res.status(500).json({ message: "Cart fetch error" });
+  }
+});
+
+// ADD TO CART
 app.post("/cart/add", async (req, res) => {
   try {
     const { userId, product } = req.body;
@@ -154,23 +167,19 @@ app.post("/cart/add", async (req, res) => {
     await cart.save();
     res.json(cart);
 
-  } catch {
-    res.status(500).json({ message: "Cart error" });
+  } catch (err) {
+    res.status(500).json({ message: "Cart add error" });
   }
 });
 
-app.get("/cart/:userId", async (req, res) => {
-  try {
-    const cart = await Cart.findOne({ userId: req.params.userId });
-    res.json(cart || { items: [] });
-  } catch {
-    res.status(500).json({ message: "Cart fetch error" });
-  }
-});
-
+// REMOVE ITEM
 app.delete("/cart/remove/:userId/:productId", async (req, res) => {
   try {
     const cart = await Cart.findOne({ userId: req.params.userId });
+
+    if (!cart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
 
     cart.items = cart.items.filter(
       i => i.productId.toString() !== req.params.productId
@@ -179,7 +188,7 @@ app.delete("/cart/remove/:userId/:productId", async (req, res) => {
     await cart.save();
     res.json(cart);
 
-  } catch {
+  } catch (err) {
     res.status(500).json({ message: "Remove error" });
   }
 });
