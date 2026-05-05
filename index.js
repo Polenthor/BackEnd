@@ -6,13 +6,15 @@ const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const Cart = require("./model/cart");
-const userModel = require("./model/user");
-const productModel = require("./model/product");
-
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 
+
+const Order = require("./model/order");
+const razorpay = require("./utils/razorpay");
+const Cart = require("./model/cart");
+const userModel = require("./model/user");
+const productModel = require("./model/product");
 const app = express();
 
 // ✅ Middleware
@@ -240,14 +242,16 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+const razorpay = require("./utils/razorpay");
+
 app.post("/payment/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
 
     const options = {
-      amount: amount * 100, // ₹ → paise
+      amount: amount * 100, // paise
       currency: "INR",
-      receipt: "order_rcptid_" + Date.now(),
+      receipt: "receipt_" + Date.now()
     };
 
     const order = await razorpay.orders.create(options);
@@ -256,31 +260,51 @@ app.post("/payment/create-order", async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).send("Payment error");
+    res.status(500).send("Order creation failed");
   }
 });
 
 app.post("/payment/verify", async (req, res) => {
-  const {
-    razorpay_order_id,
-    razorpay_payment_id,
-    razorpay_signature,
-  } = req.body;
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      userId,
+      products,
+      amount
+    } = req.body;
 
-  const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    const sign = razorpay_order_id + "|" + razorpay_payment_id;
 
-  const expectedSign = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(sign)
-    .digest("hex");
+    const expectedSign = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(sign.toString())
+      .digest("hex");
 
-  if (expectedSign === razorpay_signature) {
-    return res.json({ success: true });
-  } else {
-    return res.status(400).json({ success: false });
+    if (razorpay_signature === expectedSign) {
+      // ✅ SAVE ORDER
+      const newOrder = new Order({
+        userId,
+        products,
+        amount,
+        razorpay_order_id,
+        razorpay_payment_id,
+        status: "Paid"
+      });
+
+      await newOrder.save();
+
+      res.json({ success: true });
+
+    } else {
+      res.status(400).json({ success: false });
+    }
+
+  } catch (err) {
+    res.status(500).send("Verification failed");
   }
 });
-
 
 // ---------------- PORT ----------------
 
