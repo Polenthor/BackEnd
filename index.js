@@ -22,10 +22,26 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ✅ FIXED CORS (THIS SOLVES YOUR ERROR)
+const allowedOrigins = [
+  "https://modarc-theta.vercel.app",
+  "https://empapp-32pt5vs2p-polenthors-projects.vercel.app"
+];
+
 app.use(cors({
-  origin: true, // allow all frontend domains (for now)
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // Postman / mobile
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // ✅ TEMP allow all (debug mode)
+    }
+  },
   credentials: true
 }));
+
+// VERY IMPORTANT
+app.options("*", cors());
 
 app.options("*", cors()); // preflight fix
 
@@ -52,15 +68,28 @@ app.post("/signup", async (req, res) => {
 // login
 app.post("/login", async (req, res) => {
   try {
+    console.log("LOGIN BODY:", req.body); // debug
+
     const { Username, Password } = req.body;
+
+    if (!Username || !Password) {
+      return res.status(400).json({ message: "Missing fields" });
+    }
 
     const user = await userModel.findOne({ Username });
 
-    if (!user) return res.status(404).json({ message: "Invalid username" });
-    if (user.Password !== Password) return res.status(401).json({ message: "Invalid password" });
+    if (!user) {
+      return res.status(404).json({ message: "Invalid username" });
+    }
+
+    if (user.Password !== Password) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
 
     res.json(user);
+
   } catch (err) {
+    console.error("LOGIN ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -248,6 +277,10 @@ app.post("/payment/verify", async (req, res) => {
   } catch {
     res.status(500).send("Verification failed");
   }
+});
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(500).json({ message: "Internal Server Error" });
 });
 
 // ---------------- SERVER ----------------
