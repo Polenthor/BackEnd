@@ -21,36 +21,20 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ FIXED CORS (THIS SOLVES YOUR ERROR)
-const allowedOrigins = [
-  "https://modarc-theta.vercel.app",
-  "https://empapp-32pt5vs2p-polenthors-projects.vercel.app"
-];
-
+// ✅ FIXED CORS
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Postman / mobile
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // ✅ TEMP allow all (debug mode)
-    }
-  },
+  origin: true,
   credentials: true
 }));
 
-// VERY IMPORTANT
-app.options("*", cors());
+app.options("*", cors()); // preflight
 
-app.options("*", cors()); // preflight fix
-
-// ✅ Serve images
+// ✅ Serve uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ---------------- BASIC ROUTES ----------------
+// ---------------- BASIC ----------------
 app.get("/", (req, res) => res.send("Server Running"));
-app.get("/trail", (req, res) => res.send("Trail OK"));
+app.get("/trail", (req, res) => res.send("OK"));
 
 // ---------------- USER ----------------
 
@@ -61,6 +45,7 @@ app.post("/signup", async (req, res) => {
     await newUser.save();
     res.send("User created");
   } catch (err) {
+    console.error(err);
     res.status(500).send("Signup failed");
   }
 });
@@ -68,8 +53,6 @@ app.post("/signup", async (req, res) => {
 // login
 app.post("/login", async (req, res) => {
   try {
-    console.log("LOGIN BODY:", req.body); // debug
-
     const { Username, Password } = req.body;
 
     if (!Username || !Password) {
@@ -78,13 +61,8 @@ app.post("/login", async (req, res) => {
 
     const user = await userModel.findOne({ Username });
 
-    if (!user) {
-      return res.status(404).json({ message: "Invalid username" });
-    }
-
-    if (user.Password !== Password) {
-      return res.status(401).json({ message: "Invalid password" });
-    }
+    if (!user) return res.status(404).json({ message: "Invalid username" });
+    if (user.Password !== Password) return res.status(401).json({ message: "Invalid password" });
 
     res.json(user);
 
@@ -123,12 +101,16 @@ app.post("/addm", upload.array("images", 10), async (req, res) => {
       stock: Number(stocks[index]) || 0
     }));
 
-    const product = new productModel({ name, image: imageData });
+    const product = new productModel({
+      name,
+      image: imageData
+    });
 
     await product.save();
     res.json(product);
 
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -138,36 +120,45 @@ app.get("/products", async (req, res) => {
   try {
     const data = await productModel.find();
     res.json(data);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).send("Error fetching products");
   }
 });
 
 // ---------------- CART ----------------
 
+// add to cart
 app.post("/cart/add", async (req, res) => {
   try {
     const { userId, product } = req.body;
 
     let cart = await Cart.findOne({ userId });
 
-    if (!cart) cart = new Cart({ userId, items: [] });
+    if (!cart) {
+      cart = new Cart({ userId, items: [] });
+    }
 
     const existing = cart.items.find(
       item => item.productId.toString() === product.productId
     );
 
-    if (existing) existing.quantity++;
-    else cart.items.push({ ...product, quantity: 1 });
+    if (existing) {
+      existing.quantity++;
+    } else {
+      cart.items.push({ ...product, quantity: 1 });
+    }
 
     await cart.save();
     res.json(cart);
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Cart error" });
   }
 });
 
+// get cart
 app.get("/cart/:userId", async (req, res) => {
   try {
     const cart = await Cart.findOne({ userId: req.params.userId });
@@ -177,6 +168,7 @@ app.get("/cart/:userId", async (req, res) => {
   }
 });
 
+// remove item
 app.delete("/cart/remove/:userId/:productId", async (req, res) => {
   try {
     const cart = await Cart.findOne({ userId: req.params.userId });
@@ -187,32 +179,43 @@ app.delete("/cart/remove/:userId/:productId", async (req, res) => {
 
     await cart.save();
     res.json(cart);
+
   } catch {
     res.status(500).json({ message: "Delete error" });
   }
 });
 
+// decrease quantity
 app.post("/cart/decrease", async (req, res) => {
-  const { userId, productId } = req.body;
+  try {
+    const { userId, productId } = req.body;
 
-  const cart = await Cart.findOne({ userId });
+    const cart = await Cart.findOne({ userId });
 
-  const item = cart.items.find(i => i.productId.toString() === productId);
+    const item = cart.items.find(
+      i => i.productId.toString() === productId
+    );
 
-  if (item) {
-    item.quantity--;
-    if (item.quantity <= 0) {
-      cart.items = cart.items.filter(i => i.productId.toString() !== productId);
+    if (item) {
+      item.quantity--;
+
+      if (item.quantity <= 0) {
+        cart.items = cart.items.filter(
+          i => i.productId.toString() !== productId
+        );
+      }
     }
-  }
 
-  await cart.save();
-  res.json(cart);
+    await cart.save();
+    res.json(cart);
+
+  } catch {
+    res.status(500).json({ message: "Decrease error" });
+  }
 });
 
 // ---------------- RAZORPAY ----------------
 
-// ✅ ONLY ONE INSTANCE (FIXED)
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -232,6 +235,7 @@ app.post("/payment/create-order", async (req, res) => {
     res.json(order);
 
   } catch (err) {
+    console.error(err);
     res.status(500).send("Order failed");
   }
 });
@@ -274,10 +278,13 @@ app.post("/payment/verify", async (req, res) => {
       res.status(400).json({ success: false });
     }
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).send("Verification failed");
   }
 });
+
+// ---------------- GLOBAL ERROR HANDLER ----------------
 app.use((err, req, res, next) => {
   console.error("GLOBAL ERROR:", err);
   res.status(500).json({ message: "Internal Server Error" });
@@ -287,7 +294,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
