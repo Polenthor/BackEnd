@@ -10,6 +10,9 @@ const Cart = require("./model/cart");
 const userModel = require("./model/user");
 const productModel = require("./model/product");
 
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
+
 const app = express();
 
 // ✅ Middleware
@@ -35,6 +38,7 @@ app.get("/", (req, res) => {
 app.get("/trail", (req, res) => {
   res.send("trail message");
 });
+
 
 // ---------------- USER ----------------
 
@@ -216,6 +220,52 @@ app.post("/cart/decrease", async (req, res) => {
 
   await cart.save();
   res.json(cart);
+});
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+app.post("/payment/create-order", async (req, res) => {
+  try {
+    const { amount } = req.body;
+
+    const options = {
+      amount: amount * 100, // ₹ → paise
+      currency: "INR",
+      receipt: "order_rcptid_" + Date.now(),
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    res.json(order);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Payment error");
+  }
+});
+
+app.post("/payment/verify", async (req, res) => {
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+  } = req.body;
+
+  const sign = razorpay_order_id + "|" + razorpay_payment_id;
+
+  const expectedSign = crypto
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .update(sign)
+    .digest("hex");
+
+  if (expectedSign === razorpay_signature) {
+    return res.json({ success: true });
+  } else {
+    return res.status(400).json({ success: false });
+  }
 });
 
 
