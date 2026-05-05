@@ -6,7 +6,7 @@ const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-
+const Cart = require("./model/cart");
 const userModel = require("./model/user");
 const productModel = require("./model/product");
 
@@ -138,6 +138,84 @@ app.get("/products", async (req, res) => {
     console.error("Products error:", err);
     res.status(500).send("Server error");
   }
+});
+
+
+app.post("/cart/add", async (req, res) => {
+  try {
+    const { userId, product } = req.body;
+
+    let cart = await Cart.findOne({ userId });
+
+    if (!cart) {
+      cart = new Cart({ userId, items: [] });
+    }
+
+    const existing = cart.items.find(
+      item => item.productId.toString() === product.productId
+    );
+
+    if (existing) {
+      existing.quantity += 1;
+    } else {
+      cart.items.push({ ...product, quantity: 1 });
+    }
+
+    await cart.save();
+    res.json(cart);
+
+  } catch (err) {
+    res.status(500).json({ message: "Error adding to cart" });
+  }
+}); 
+
+
+app.get("/cart/:userId", async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ userId: req.params.userId });
+    res.json(cart || { items: [] });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching cart" });
+  }
+});
+
+app.delete("/cart/remove/:userId/:productId", async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ userId: req.params.userId });
+
+    cart.items = cart.items.filter(
+      item => item.productId.toString() !== req.params.productId
+    );
+
+    await cart.save();
+    res.json(cart);
+
+  } catch (err) {
+    res.status(500).json({ message: "Error removing item" });
+  }
+});
+ 
+app.post("/cart/decrease", async (req, res) => {
+  const { userId, productId } = req.body;
+
+  const cart = await Cart.findOne({ userId });
+
+  const item = cart.items.find(
+    i => i.productId.toString() === productId
+  );
+
+  if (item) {
+    item.quantity -= 1;
+
+    if (item.quantity <= 0) {
+      cart.items = cart.items.filter(
+        i => i.productId.toString() !== productId
+      );
+    }
+  }
+
+  await cart.save();
+  res.json(cart);
 });
 
 
