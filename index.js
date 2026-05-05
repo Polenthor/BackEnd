@@ -19,8 +19,21 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const allowedOrigins = [
+  "https://modarc-theta.vercel.app",
+  "https://empapp-32pt5vs2p-polenthors-projects.vercel.app"
+];
+
 app.use(cors({
-  origin: "https://modarc-theta.vercel.app",
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow Postman
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("CORS not allowed"));
+    }
+  },
   credentials: true
 }));
 
