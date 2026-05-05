@@ -18,32 +18,19 @@ const productModel = require("./model/product");
 const app = express();
 
 // ================= CORS FIX =================
-const allowedOrigins = [
-  "https://modarc-theta.vercel.app",
-  "https://empapp-32pt5vs2p-polenthors-projects.vercel.app"
-];
-
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // allow temporarily (fixes your error)
-    }
-  },
+  origin: true, // allow all (safe for now)
   credentials: true
 }));
 
-// ✅ VERY IMPORTANT (fix preflight)
-app.options("*", cors());
+// ❌ REMOVE THIS (causes crash)
+// app.options("*", cors());
 
 // ================= MIDDLEWARE =================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ================= STATIC FILES =================
+// ================= STATIC =================
 const uploadDir = path.join(__dirname, "uploads");
 
 if (!fs.existsSync(uploadDir)) {
@@ -80,7 +67,7 @@ app.post("/signup", async (req, res) => {
     const user = new userModel(req.body);
     await user.save();
     res.json({ message: "User created" });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Signup failed" });
   }
 });
@@ -101,7 +88,7 @@ app.post("/login", async (req, res) => {
 
     res.json(user);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -129,7 +116,7 @@ app.post("/addm", upload.array("images", 10), async (req, res) => {
 
     res.json(product);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Product error" });
   }
 });
@@ -138,7 +125,7 @@ app.get("/products", async (req, res) => {
   try {
     const data = await productModel.find();
     res.json(data);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Fetch error" });
   }
 });
@@ -209,7 +196,7 @@ app.post("/payment/create-order", async (req, res) => {
 
     res.json(order);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Order creation failed" });
   }
 });
