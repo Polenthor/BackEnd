@@ -4,15 +4,34 @@ require("./connection");
 
 const cors = require("cors");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
+
 const Cart = require("./model/cart");
 const userModel = require("./model/user");
 const productModel = require("./model/product");
 
 const app = express();
 
-// ✅ Middleware
+// ---------------- CLOUDINARY CONFIG ----------------
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
+
+// Cloudinary storage
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "products",
+    allowed_formats: ["jpg", "png", "jpeg", "webp"],
+  },
+});
+
+const upload = multer({ storage });
+
+// ---------------- MIDDLEWARE ----------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -20,10 +39,6 @@ app.use(cors({
   origin: "https://modarc-theta.vercel.app",
   credentials: true
 }));
-
-// ✅ Serve images properly
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
 
 // ---------------- ROUTES ----------------
 
@@ -74,41 +89,16 @@ app.post("/login", async (req, res) => {
 });
 
 
-// ---------------- MULTER (FIXED STORAGE) ----------------
-
-// ✅ IMPORTANT: use /tmp in Railway, but also serve correctly
-const uploadDir = path.join(__dirname, "uploads");
-
-// ensure folder exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir); // ✅ NOT /tmp anymore
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({ storage });
-
-
 // ---------------- PRODUCTS ----------------
 
-// ➕ Add product
+// ➕ Add product (NOW USING CLOUDINARY)
 app.post("/addm", upload.array("images", 10), async (req, res) => {
   try {
     const prices = req.body.prices;
     const stocks = req.body.stocks;
 
-    // ✅ FIX: use Railway backend URL
-    const BASE_URL = "https://backend-production-400ff.up.railway.app";
-
     const imageData = req.files.map((file, index) => ({
-      url: `${BASE_URL}/uploads/${file.filename}`, // ✅ FIXED
+      url: file.path, // 🔥 Cloudinary URL
       price: Number(prices[index]) || 0,
       stock: Number(stocks[index]) || 0
     }));
@@ -141,6 +131,8 @@ app.get("/products", async (req, res) => {
 });
 
 
+// ---------------- CART ----------------
+
 app.post("/cart/add", async (req, res) => {
   try {
     const { userId, product } = req.body;
@@ -167,8 +159,7 @@ app.post("/cart/add", async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: "Error adding to cart" });
   }
-}); 
-
+});
 
 app.get("/cart/:userId", async (req, res) => {
   try {
@@ -194,7 +185,7 @@ app.delete("/cart/remove/:userId/:productId", async (req, res) => {
     res.status(500).json({ message: "Error removing item" });
   }
 });
- 
+
 app.post("/cart/decrease", async (req, res) => {
   const { userId, productId } = req.body;
 
@@ -217,7 +208,6 @@ app.post("/cart/decrease", async (req, res) => {
   await cart.save();
   res.json(cart);
 });
-
 
 // ---------------- PORT ----------------
 
