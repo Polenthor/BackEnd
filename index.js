@@ -18,14 +18,11 @@ const Contact = require("./model/contact");
 
 const app = express();
 
-// ================= CORS FIX =================
+// ================= CORS =================
 app.use(cors({
-  origin: true, // allow all (safe for now)
+  origin: true,
   credentials: true
 }));
-
-// ❌ REMOVE THIS (causes crash)
-// app.options("*", cors());
 
 // ================= MIDDLEWARE =================
 app.use(express.json());
@@ -63,19 +60,48 @@ app.get("/", (req, res) => {
 });
 
 // ================= USER =================
+
+// SIGNUP (✅ FIXED)
 app.post("/signup", async (req, res) => {
   try {
-    const user = new userModel(req.body);
+    let { Username, Password } = req.body;
+
+    // normalize username
+    Username = Username.toLowerCase().trim();
+
+    // check existing user
+    const existingUser = await userModel.findOne({ Username });
+
+    if (existingUser) {
+      return res.status(400).json({
+        message: "Username already taken ❌"
+      });
+    }
+
+    const user = new userModel({ Username, Password });
     await user.save();
-    res.json({ message: "User created" });
-  } catch {
+
+    res.json({ message: "User created ✅" });
+
+  } catch (err) {
+    console.error(err);
+
+    if (err.code === 11000) {
+      return res.status(400).json({
+        message: "Username already exists ❌"
+      });
+    }
+
     res.status(500).json({ message: "Signup failed" });
   }
 });
 
+// LOGIN (✅ UPDATED)
 app.post("/login", async (req, res) => {
   try {
-    const { Username, Password } = req.body;
+    let { Username, Password } = req.body;
+
+    Username = Username.toLowerCase().trim();
 
     const user = await userModel.findOne({ Username });
 
@@ -89,7 +115,8 @@ app.post("/login", async (req, res) => {
 
     res.json(user);
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -99,7 +126,6 @@ app.post("/addm", upload.array("images", 10), async (req, res) => {
   try {
     const BASE_URL = process.env.BASE_URL;
 
-    // ✅ ALWAYS CONVERT TO ARRAY
     const prices = Array.isArray(req.body.prices)
       ? req.body.prices
       : [req.body.prices];
@@ -133,12 +159,11 @@ app.get("/products", async (req, res) => {
   try {
     const data = await productModel.find();
     res.json(data);
-  } catch {
+  } catch (err) {
     res.status(500).json({ message: "Fetch error" });
   }
 });
 
-// ================= CART =================
 // ================= CART =================
 
 // GET CART
@@ -146,7 +171,7 @@ app.get("/cart/:userId", async (req, res) => {
   try {
     const cart = await Cart.findOne({ userId: req.params.userId });
     res.json(cart || { items: [] });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Cart fetch error" });
   }
 });
@@ -175,7 +200,7 @@ app.post("/cart/add", async (req, res) => {
     await cart.save();
     res.json(cart);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Cart add error" });
   }
 });
@@ -196,7 +221,7 @@ app.delete("/cart/remove/:userId/:productId", async (req, res) => {
     await cart.save();
     res.json(cart);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Remove error" });
   }
 });
@@ -207,7 +232,7 @@ app.post("/payment/create-order", async (req, res) => {
     const { amount } = req.body;
 
     const order = await razorpay.orders.create({
-      amount: amount * 100, // convert to paise
+      amount: amount * 100,
       currency: "INR",
       receipt: "receipt_" + Date.now(),
     });
@@ -219,7 +244,6 @@ app.post("/payment/create-order", async (req, res) => {
     res.status(500).json({ message: "Order creation failed" });
   }
 });
-
 
 app.post("/payment/verify", async (req, res) => {
   try {
@@ -243,7 +267,6 @@ app.post("/payment/verify", async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
-    // ✅ Save order
     const newOrder = new Order({
       userId,
       products,
@@ -263,20 +286,8 @@ app.post("/payment/verify", async (req, res) => {
   }
 });
 
-app.get("/admin/messages", async (req, res) => {
-  try {
-    const messages = await Contact.find().sort({ createdAt: -1 });
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch messages" });
-  }
-});
-
-app.delete("/admin/message/:id", async (req, res) => {
-  await Contact.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
-});
- app.post("/contact", async (req, res) => {
+// ================= CONTACT =================
+app.post("/contact", async (req, res) => {
   try {
     const { name, email, message } = req.body;
 
@@ -285,9 +296,24 @@ app.delete("/admin/message/:id", async (req, res) => {
 
     res.json({ success: true });
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "Failed to send" });
   }
+});
+
+// ADMIN
+app.get("/admin/messages", async (req, res) => {
+  try {
+    const messages = await Contact.find().sort({ createdAt: -1 });
+    res.json(messages);
+  } catch {
+    res.status(500).json({ message: "Failed to fetch messages" });
+  }
+});
+
+app.delete("/admin/message/:id", async (req, res) => {
+  await Contact.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
 });
 
 // ================= SERVER =================
