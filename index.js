@@ -14,6 +14,7 @@ const Cart = require("./model/cart");
 const Order = require("./model/order");
 const userModel = require("./model/user");
 const productModel = require("./model/product");
+const Contact = require("./model/contact");
 
 const app = express();
 
@@ -252,6 +253,33 @@ app.post("/payment/verify", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Verification failed" });
+  }
+});
+
+app.get("/admin/messages", async (req, res) => {
+  try {
+    const messages = await Contact.find().sort({ createdAt: -1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch messages" });
+  }
+});
+
+app.delete("/admin/message/:id", async (req, res) => {
+  await Contact.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
+});
+ app.post("/contact", async (req, res) => {
+  try {
+    const { name, email, message } = req.body;
+
+    const newMessage = new Contact({ name, email, message });
+    await newMessage.save();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ message: "Failed to send" });
   }
 });
 
