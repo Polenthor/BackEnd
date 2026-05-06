@@ -199,16 +199,19 @@ app.post("/payment/create-order", async (req, res) => {
     const { amount } = req.body;
 
     const order = await razorpay.orders.create({
-      amount: amount * 100,
-      currency: "INR"
+      amount: amount * 100, // convert to paise
+      currency: "INR",
+      receipt: "receipt_" + Date.now(),
     });
 
     res.json(order);
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Order creation failed" });
   }
 });
+
 
 app.post("/payment/verify", async (req, res) => {
   try {
@@ -221,18 +224,19 @@ app.post("/payment/verify", async (req, res) => {
       amount
     } = req.body;
 
-    const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expected = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(sign)
+      .update(body)
       .digest("hex");
 
     if (expected !== razorpay_signature) {
       return res.status(400).json({ success: false });
     }
 
-    const order = new Order({
+    // ✅ Save order
+    const newOrder = new Order({
       userId,
       products,
       amount,
@@ -241,11 +245,12 @@ app.post("/payment/verify", async (req, res) => {
       status: "Paid"
     });
 
-    await order.save();
+    await newOrder.save();
 
     res.json({ success: true });
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Verification failed" });
   }
 });
