@@ -99,13 +99,19 @@ app.post("/addm", upload.array("images", 10), async (req, res) => {
   try {
     const BASE_URL = process.env.BASE_URL;
 
-    const prices = req.body.prices;
-    const stocks = req.body.stocks;
+    // ✅ ALWAYS CONVERT TO ARRAY
+    const prices = Array.isArray(req.body.prices)
+      ? req.body.prices
+      : [req.body.prices];
 
-    const imageData = req.files.map((file, i) => ({
+    const stocks = Array.isArray(req.body.stocks)
+      ? req.body.stocks
+      : [req.body.stocks];
+
+    const imageData = req.files.map((file, index) => ({
       url: `${BASE_URL}/uploads/${file.filename}`,
-      price: Number(prices[i]) || 0,
-      stock: Number(stocks[i]) || 0
+      price: Number(prices[index]) || 0,
+      stock: Number(stocks[index]) || 0
     }));
 
     const product = new productModel({
@@ -117,8 +123,9 @@ app.post("/addm", upload.array("images", 10), async (req, res) => {
 
     res.json(product);
 
-  } catch {
-    res.status(500).json({ message: "Product error" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Upload error" });
   }
 });
 
